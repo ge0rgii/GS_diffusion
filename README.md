@@ -43,6 +43,10 @@ negative - "Unrealistic colors, distorted proportions, blurred details, heavy sh
 
 ![result_2](https://github.com/user-attachments/assets/75e50f82-d48d-4c38-8341-dadb27d210f1)
 
+Used prompts:
+positive - "An elf, with pointed ears, ethereal and elegant features, detailed and lifelike, in the style of Alan Lee, smooth and flawless skin, sharp and expressive eyes, long and flowing hair, otherworldly and mystical appearance, 32k uhd, high-definition detail, wearing simple yet stylish elven attire, black background, cinematic lighting, photorealistic, studio portrait."
+negative - "Distorted, disfigured, ugly, human features, unrealistic proportions, poor lighting, low detail."
+
 ### TODO:
 Explore improvements by iteratively applying Stable Diffusion (after the first step, it may be better to use [this approach](https://stable-diffusion-art.com/video-to-video/#Method_2_ControlNet_img2img) along with the DDIM Sampler) and Gaussian Splatting on the resulting models. The hypothesis is that Gaussian Splatting increases consistency between adjacent frames, while Stable Diffusion enhances quality.
 
