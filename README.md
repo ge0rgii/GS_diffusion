@@ -5,7 +5,7 @@ This repository is part of the research conducted under the [Implicit Deepfake](
 
 To reproduce the results of this experiment, you will need to install the following tools:
 
-- [**Stable Diffusion**]([https://github.com/quereste/implicit-deepfak](https://github.com/AUTOMATIC1111/stable-diffusion-webui)e)
+- [**Stable Diffusion**]([https://github.com/AUTOMATIC1111/stable-diffusion-webui])
 - **EbSynth**: 
 - **Gaussian Splatting**: 
 
