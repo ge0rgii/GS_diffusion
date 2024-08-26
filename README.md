@@ -50,4 +50,9 @@ negative - "Distorted, disfigured, ugly, human features, unrealistic proportions
 ### TODO:
 Explore improvements by iteratively applying Stable Diffusion (after the first step, it may be better to use [this approach](https://stable-diffusion-art.com/video-to-video/#Method_2_ControlNet_img2img) along with the DDIM Sampler) and Gaussian Splatting on the resulting models. The hypothesis is that Gaussian Splatting increases consistency between adjacent frames, while Stable Diffusion enhances quality.
 
+Results from the first experiment:
+
+![output_combined-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/50c06644-d332-4141-a1ab-c90802ba5e27)
+
+
 
