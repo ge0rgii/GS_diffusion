@@ -64,11 +64,10 @@ python loop.py /path/to/main_folder "My Prompt" --start 0 --end 3 (optional para
 Main folder should contain video render of the object and transforms json. There are additional optional parameters (resolution, fps, etc.) which I will add later to the description. Code will generate (end - start) folders named as iter1, iter2, etc. which will contain gaussian splatting model and generated frames. Video results (360 degrees renders) will appear in main_folder named as iter1.mp4, iter2.mp4, ...
 In the middle of generating process the program will pause and wait till you use EbSynth program to propagate changes from diffusion to all frames. Unfortunately you need to do it manually.
 
-![ezgif-2-14c20ef111](https://github.com/user-attachments/assets/94be7670-14ef-47c3-b252-4ad9d46d892e)
-
-
 ### TODO:
-metrics
+metrics for 3 faces 10 iterations:
+
+![ezgif-2-14c20ef111](https://github.com/user-attachments/assets/94be7670-14ef-47c3-b252-4ad9d46d892e)
 
 
 
