@@ -54,5 +54,19 @@ Results from the first experiment:
 
 ![output_combined-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/50c06644-d332-4141-a1ab-c90802ba5e27)
 
+### Scripts to reproduce the results (only Windows)
+First you need to install the software mentioned in **Tools** Section (we provide example dataset in the [link](https://ujchmura-my.sharepoint.com/:f:/g/personal/georgii_stanishevskii_student_uj_edu_pl/Ei93fzknaspDp0sxhWXdLrABSdBNXTFAv_dIHjPHHxWFEA?e=flv8KE), in such case you do not need Blender)
+Then copy all the scripts listed in this repository into stable Automatic1111 folder, run Stable Diffusion with --api parameter and open the folder in CMD Terminal (Powershell may not work properly). Activate venv located in .\venv\Scripts\activate.bat
+
+**Usage**
+python loop.py /path/to/main_folder "My Prompt" --start 0 --end 3 (optional parameters)
+
+Main folder should contain video render of the object and transforms json. There are additional optional parameters (resolution, fps, etc.) which I will add later to the description. Code will generate (end - start) folders named as iter1, iter2, etc. which will contain gaussian splatting model and generated frames. Video results (360 degrees renders) will appear in main_folder named as iter1.mp4, iter2.mp4, ...
+In the middle of generating process the program will pause and wait till you use EbSynth program to propagate changes from diffusion to all frames. Unfortunately you need to do it manually.
+
+### TODO:
+metrics
+
+
 
 
