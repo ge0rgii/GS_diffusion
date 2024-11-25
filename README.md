@@ -67,7 +67,7 @@ In the middle of generating process the program will pause and wait till you use
 ### TODO:
 metrics for 3 faces 10 iterations:
 
-![ezgif-2-14c20ef111](https://github.com/user-attachments/assets/94be7670-14ef-47c3-b252-4ad9d46d892e)
+![Uploading ezgif-2-14c20ef111.gif…]()
 
 
 
