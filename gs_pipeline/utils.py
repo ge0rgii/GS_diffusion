@@ -116,3 +116,65 @@ def setup_temporal_kit_path(config: Dict[str, Any]):
         print("INFO: Пути TemporalKit уже присутствовали в sys.path.")
 
     _temporal_kit_paths_added = True # Отмечаем, что настройка выполнена (или была попытка)
+
+
+# Помести этот блок в самый конец файла gs_pipeline/utils.py
+
+if __name__ == "__main__":
+    # Этот код выполнится, только если запустить utils.py напрямую
+    # (например, python gs_pipeline/utils.py из корневой папки проекта)
+    print("\n--- Запуск тестов для utils.py ---")
+
+    # --- Тест load_config ---
+    print("\n[Тест 1] Загрузка реального config.yaml...")
+    # Путь к конфигу относительно корня проекта
+    actual_config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../config.yaml"))
+    config = load_config(actual_config_path) # Используем функцию, которую тестируем
+
+    if isinstance(config, dict) and config: # Проверяем, что это непустой словарь
+        print("УСПЕХ: config.yaml загружен.")
+        # Выведем пару ключей для проверки
+        print(f"  Путь к A1111 extensions: {config.get('paths', {}).get('a1111_extensions_dir', 'НЕ НАЙДЕНО')}")
+        print(f"  FPS: {config.get('pipeline_settings', {}).get('fps', 'НЕ НАЙДЕНО')}")
+    elif config == {}:
+         print("!!! ПРЕДУПРЕЖДЕНИЕ/ОШИБКА: load_config вернул пустой словарь. Проверьте путь и содержимое config.yaml.")
+    else:
+        print(f"!!! ОШИБКА: load_config вернул НЕ словарь: {type(config)}")
+
+    print("\n[Тест 2] Загрузка несуществующего файла...")
+    non_existent_config = load_config("invalid_path/non_existent_config.yaml")
+    if non_existent_config == {}:
+        print("УСПЕХ: Корректно вернулся пустой словарь для несуществующего файла.")
+    else:
+        print("!!! ОШИБКА: Не вернулся пустой словарь для несуществующего файла.")
+
+    # --- Тест setup_temporal_kit_path ---
+    print("\n[Тест 3] Настройка путей TemporalKit...")
+    if isinstance(config, dict) and config: # Тестируем только если конфиг загрузился
+        # Сбросим флаг перед тестом (на случай если модуль импортировался где-то еще)
+        _temporal_kit_paths_added = False
+        initial_path_len = len(sys.path)
+        print(f"  Длина sys.path до вызова: {initial_path_len}")
+        setup_temporal_kit_path(config) # Первый вызов
+        first_call_path_len = len(sys.path)
+        print(f"  Длина sys.path после первого вызова: {first_call_path_len}")
+
+        print("  Повторный вызов setup_temporal_kit_path...")
+        setup_temporal_kit_path(config) # Второй вызов (флаг должен сработать)
+        second_call_path_len = len(sys.path)
+        print(f"  Длина sys.path после второго вызова: {second_call_path_len}")
+
+        if second_call_path_len != first_call_path_len:
+             print("!!! ОШИБКА: Длина sys.path изменилась при повторном вызове! Флаг _temporal_kit_paths_added не сработал?")
+        # Проверка добавления конкретных путей требует анализа вывода функции или sys.path
+        # Пример: Проверить, что нужный путь появился в sys.path
+        # tk_path = os.path.join(config['paths']['a1111_extensions_dir'], "TemporalKit")
+        # if os.path.abspath(tk_path) in sys.path:
+        #      print("  INFO: Путь TemporalKit найден в sys.path.")
+        # else:
+        #      print("  ПРЕДУПРЕЖДЕНИЕ: Путь TemporalKit НЕ найден в sys.path (возможно, он уже был там или ошибка?).")
+
+    else:
+        print("  Пропуск теста setup_temporal_kit_path, так как конфиг не загружен.")
+
+    print("\n--- Тестирование utils.py завершено ---")

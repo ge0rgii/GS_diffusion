@@ -33,14 +33,19 @@
     * **Status:** [X] Done
 
 * **Task 1.2: Implement Config Loading (`utils.py`)**
-    * **Current State:** Empty `gs_pipeline/utils.py`. `config.yaml` populated. Dedicated venv exists and is activated.
-    * **Target State:** `gs_pipeline/utils.py` contains a function `load_config(...)` using `PyYAML` that reads the specified YAML file, handles potential `FileNotFoundError` and `yaml.YAMLError`, and returns the configuration as a Python dictionary. `PyYAML` installed in the dedicated venv and added to `requirements.txt`.
-    * **Status:** [X] Done # <-- Отмечаем!
+    * (...)
+    * **Status:** [X] Done # <-- Ты только что это сделал (или сейчас сделаешь)
 
 * **Task 1.3: Implement TemporalKit Path Setup (`utils.py`)**
-    * **Current State:** `gs_pipeline/utils.py` содержит функцию `load_config`.
-    * **Target State:** `gs_pipeline/utils.py` содержит функцию `setup_temporal_kit_path(config)`, которая читает `paths.a1111_extensions_dir` из словаря `config`, проверяет существование путей к `TemporalKit` и `TemporalKit/scripts`, добавляет их в `sys.path` через `sys.path.insert(0, ...)`. Функция использует глобальный флаг `_temporal_kit_paths_added`, чтобы выполняться только один раз, и выводит информационные сообщения или ошибки. Добавлен `import sys`.
-    * **Status:** [X] To Do # <-- Начинаем этот таск
+    * **Current State:** `gs_pipeline/utils.py` содержит `load_config`.
+    * **Target State:** `gs_pipeline/utils.py` содержит функцию `setup_temporal_kit_path(...)`. Добавлен `import sys`.
+    * **Status:** [ ] To Do # <-- СЛЕДУЮЩИЙ ШАГ КОДИНГА
 
-* **Task 1.4: Implement Subprocess Utility (`utils.py`)**
-    * (...) Status: [ ] To Do
+* **Task 1.4: Add Basic Tests for Utils**
+    * (...)
+    * **Status:** [X] Done # <-- Отмечаем!
+
+* **Task 1.5: Implement Subprocess Utility (`utils.py`)**
+    * **Current State:** `utils.py` содержит `load_config`, `setup_temporal_kit_path` и блок тестов. Старая функция `run_script` есть в `combined.txt`.
+    * **Target State:** `gs_pipeline/utils.py` содержит новую, более гибкую и надежную функцию `run_subprocess(command_args: list, cwd: Optional[str] = None, env: Optional[dict] = None, capture_output: bool = False) -> tuple[int, str, str]`. Эта функция использует `subprocess.run`, умеет запускать команды в указанной директории (`cwd`), опционально передавать переменные окружения (`env`), захватывать вывод (`capture_output`), логирует команду и результат, обрабатывает `CalledProcessError` и возвращает код возврата, stdout и stderr. Старый `run_script` больше не используется. Добавлены тесты для `run_subprocess` в блок `if __name__ == "__main__":`.
+    * **Status:** [ ] To Do # <-- Начинаем этот таск
