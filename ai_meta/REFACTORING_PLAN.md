@@ -34,10 +34,13 @@
 
 * **Task 1.2: Implement Config Loading (`utils.py`)**
     * **Current State:** Empty `gs_pipeline/utils.py`. `config.yaml` populated. Dedicated venv exists and is activated.
-    * **Target State:** `gs_pipeline/utils.py` contains `load_config(...)`. `PyYAML` installed in the dedicated venv and added to `requirements.txt`.
-    * **Status:** [ ] To Do # <-- Фактическая следующая задача ПОСЛЕ создания venv
+    * **Target State:** `gs_pipeline/utils.py` contains a function `load_config(...)` using `PyYAML` that reads the specified YAML file, handles potential `FileNotFoundError` and `yaml.YAMLError`, and returns the configuration as a Python dictionary. `PyYAML` installed in the dedicated venv and added to `requirements.txt`.
+    * **Status:** [X] Done # <-- Отмечаем!
 
 * **Task 1.3: Implement TemporalKit Path Setup (`utils.py`)**
-    * (...) Status: [ ] To Do
+    * **Current State:** `gs_pipeline/utils.py` содержит функцию `load_config`.
+    * **Target State:** `gs_pipeline/utils.py` содержит функцию `setup_temporal_kit_path(config)`, которая читает `paths.a1111_extensions_dir` из словаря `config`, проверяет существование путей к `TemporalKit` и `TemporalKit/scripts`, добавляет их в `sys.path` через `sys.path.insert(0, ...)`. Функция использует глобальный флаг `_temporal_kit_paths_added`, чтобы выполняться только один раз, и выводит информационные сообщения или ошибки. Добавлен `import sys`.
+    * **Status:** [ ] To Do # <-- Начинаем этот таск
+
 * **Task 1.4: Implement Subprocess Utility (`utils.py`)**
     * (...) Status: [ ] To Do
