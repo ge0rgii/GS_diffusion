@@ -1,0 +1,98 @@
+# config.yaml v0.1
+################################################################################
+# 1. Пути к внешним инструментам и директориям
+################################################################################
+paths:
+  # Путь к папке с расширениями Automatic1111 (TemporalKit располагается внутри).
+  a1111_extensions_dir: "C:/Users/jerzy/sd2/stable-diffusion-webui/extensions" # <-- Проверь этот путь!
+
+  # Путь к корневой папке скомпилированного Gaussian Splatting.
+  gaussian_splatting_dir: "C:/Users/jerzy/gaussian-splatting" # <-- Проверь этот путь!
+
+  # Путь к папке для выходных данных пайплайна
+  output_base_dir: "./output" # Относительно корня проекта
+
+  # Путь к исполняемому файлу ffmpeg (если не в PATH).
+  # Если ffmpeg есть в PATH, оставь "ffmpeg".
+  ffmpeg_path: "ffmpeg"
+
+
+################################################################################
+# 2. Параметры Stable Diffusion и ControlNet/Refiner
+################################################################################
+stable_diffusion_api:
+  # URL-адрес запущенного A1111 webui с включённым флагом --api
+  sd_api_url: "http://127.0.0.1:7860"
+
+  # Эти промпты обычно переопределяются при запуске
+  prompt: "stylized 3d model"
+  negative_prompt: "ugly, deformed, blurry"
+
+  # Базовые параметры SD-режима img2img (из process_collage.py)
+  denoising_strength: 0.9
+  image_cfg_scale: 1.5 # Часто оставляют по умолчанию (7?), но в коде было 1.5
+  steps: 30
+  cfg_scale: 9
+  sampler_name: "DPM++ 2M"
+  width: 1536
+  height: 1536
+
+  # ControlNet (из process_collage.py)
+  controlnet_enabled: true
+  controlnet_model: "control_v11p_sd15_canny [d14c016b]" # Убедись, что имя модели точное
+  controlnet_module: "canny"
+  controlnet_weight: 1.0
+  controlnet_guidance_end: 1.0 # В коде guidance_start = 0.0, guidance_end = 1.0
+  control_mode: "ControlNet is more important"
+  pixel_perfect: true
+  # Параметры Canny (если module='canny')
+  controlnet_processor_res: 512 # Внутреннее разрешение Canny
+  controlnet_threshold_a: 100.0
+  controlnet_threshold_b: 200.0
+
+  # Refiner (из process_collage.py)
+  refiner_enabled: true
+  refiner_model: "v1-5-pruned-emaonly.safetensors [6ce016689]" # Убедись, что имя модели точное
+  refiner_switch_at: 0.8 # В коде использовался strength, но для Refiner обычно switch_at
+
+
+################################################################################
+# 3. Основные настройки пайплайна (TemporalKit, EbSynth)
+################################################################################
+pipeline_settings:
+  fps: 30
+  batch_size: 8 # Количество кадров между ключами (TemporalKit)
+  sides: 4 # Аргумент "size_size" для generate_squares_to_folder (TemporalKit)
+  resolution: 1536 # Высота кадра (TemporalKit `resolution`)
+  max_frames: 144 # Макс. кол-во кадров для обработки (TemporalKit `max_frames`)
+  border_frames: 2 # Кол-во кадров для overlap (TemporalKit `border`)
+  ebsynth_mode: true # Режим EbSynth в TemporalKit
+  output_resolution: 512 # Разрешение для EbSynth (`_smol_resolution` в TemporalKit)
+  max_frames_to_save: null # Лимит кадров на сохранение в preprocess (null = без лимита)
+  prompt_on_pause: "EbSynth ручной шаг выполнен? Нажмите Y для продолжения, N для отмены: "
+
+
+################################################################################
+# 4. Параметры для формирования датасетов GS (train/val/test)
+################################################################################
+dataset_split:
+  train_prop: 0.8
+  test_prop: 0.05
+  val_prop: 0.15 # Должны суммироваться в 1.0
+
+
+################################################################################
+# 5. Настройки Gaussian Splatting
+################################################################################
+gaussian_splatting:
+  # Имя conda окружения для активации (из gs.bat)
+  conda_env_name: "torch_gpu_test" # Оставь пустым "", если активация не нужна / делается вручную
+  # Подпапка внутри output/iterN/gs/ для сохранения модели GS
+  model_output_subdir: "gaussian_white"
+  # Дополнительные аргументы для train.py (пока пусто)
+  train_args: []
+  # Дополнительные аргументы для render.py (пока пусто)
+  render_args: []
+  # Можно добавить явные параметры для train/render если нужно, например:
+  # iterations: 30000
+  # save_iterations: [7000, 30000]

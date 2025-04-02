@@ -1,0 +1,1052 @@
+
+=== automate_process.py ===
+
+import subprocess
+import os
+import sys
+
+
+def run_script(script_path, args, shell=False):
+    """
+    Executes a Python script or batch file with the specified arguments.
+    """
+    if script_path.endswith(".py"):
+        command = [sys.executable, script_path] + args
+    else:  # Assume it's a batch file
+        command = [script_path] + args
+    try:
+        subprocess.run(command, check=True, shell=shell)
+        print(f"Successfully executed: {script_path}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing {script_path}: {e}")
+        sys.exit(1)
+
+
+def prompt_user():
+    """
+    Prompts the user to continue or exit the process.
+    """
+    while True:
+        choice = input("Do you want to continue with the next steps? (Y/N): ").strip().lower()
+        if choice in ['y', 'n']:
+            return choice == 'y'
+        print("Invalid input. Please enter 'Y' to continue or 'N' to stop.")
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Automate execution of multiple scripts.")
+    # Required parameters
+    parser.add_argument("--video_path", type=str, help="Path to the input video.")
+    parser.add_argument("--target_folder", type=str, help="Path to the target folder.")
+    parser.add_argument("--prompt", type=str, help="Prompt for guiding the process.")
+
+    # Shared optional parameters
+    parser.add_argument("--fps", type=int, help="Frames per second.")
+    parser.add_argument("--batch_size", type=int, help="Batch size for processing.")
+    parser.add_argument("--sides", type=int, help="Sides parameter.")
+    parser.add_argument("--resolution", type=int, help="Height resolution for frames.")
+    parser.add_argument("--max_frames", type=int, help="Maximum number of frames.")
+    parser.add_argument("--border_frames", type=int, help="Number of border frames.")
+    parser.add_argument("--ebsynth_mode", type=bool, help="Ebsynth mode toggle.")
+    parser.add_argument("--output_resolution", type=int, help="Output resolution for EbSynth.")
+
+    args = parser.parse_args()
+
+    # Paths to scripts
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    scripts_phase_1 = [
+        os.path.join(current_dir, "preprocess_video.py"),
+        os.path.join(current_dir, "process_collage.py"),
+        os.path.join(current_dir, "prepare_ebsynth.py"),
+    ]
+    scripts_phase_2 = [
+        os.path.join(current_dir, "recombine_ebsynth.py"),
+        os.path.join(current_dir, "cut_alpha_split.py"),
+        os.path.join(current_dir, "gs.bat"),
+        os.path.join(current_dir, "join_video.py"),
+    ]
+
+    # Shared parameters
+    shared_params = {
+        "fps": args.fps,
+        "batch_size": args.batch_size,
+        "sides": args.sides,
+        "resolution": args.resolution,
+        "max_frames": args.max_frames,
+        "border_frames": args.border_frames,
+        "ebsynth_mode": args.ebsynth_mode,
+    }
+    shared_params = {k: v for k, v in shared_params.items() if v is not None}  # Remove None values
+
+    # Run phase 1 scripts
+    for script in scripts_phase_1:
+        script_args = []
+        if "preprocess_video.py" in script:
+            script_args.extend(["--video_path", args.video_path, "--target_folder", args.target_folder])
+        elif "process_collage.py" in script:
+            script_args.extend(["--target_folder", args.target_folder, "--prompt", args.prompt])
+        elif "prepare_ebsynth.py" in script:
+            script_args.extend(["--target_folder", args.target_folder])
+            if args.output_resolution:
+                script_args.extend(["--output_resolution", str(args.output_resolution)])
+        # Add shared parameters
+        for key, value in shared_params.items():
+            script_args.extend([f"--{key}", str(value)])
+        run_script(script, script_args)
+
+    # Ask the user whether to proceed with phase 2
+    if not prompt_user():
+        print("Process terminated by the user.")
+        sys.exit(0)
+
+    # Run phase 2 scripts
+    for script in scripts_phase_2:
+        script_args = []
+        if "cut_alpha_split.py" in script or "recombine_ebsynth.py" in script or "join_video.py" in script:
+            script_args.extend(["--target_folder", args.target_folder])
+        elif "gs.bat" in script:
+            script_args.append(args.target_folder)
+        run_script(script, script_args, shell=True if script.endswith(".bat") else False)
+
+    print("All scripts executed successfully.")
+
+
+if __name__ == "__main__":
+    main()
+
+=== cut_alpha_split.py ===
+
+import os
+import subprocess
+from PIL import Image
+import random
+import json
+import shutil
+import argparse
+
+def main():
+    parser = argparse.ArgumentParser(description="Process video and prepare data for training.")
+    parser.add_argument('--target_folder', type=str, required=True, help='Path to the target folder.')
+    args = parser.parse_args()
+
+    target_folder = args.target_folder
+    project_folder = os.path.abspath(os.path.join(target_folder, '..'))  # One folder above the target_folder
+
+    crossfade_video = os.path.join(target_folder, 'crossfade.mp4')
+    gs_folder = os.path.join(target_folder, 'gs')
+    train_main_folder = os.path.join(gs_folder, 'train_main')
+
+    # Ensure that the gs/train_main folder exists
+    os.makedirs(train_main_folder, exist_ok=True)
+
+    # Step 1: Split video into frames
+    print("Splitting crossfade.mp4 into frames...")
+    ffmpeg_command = [
+        'ffmpeg',
+        '-hwaccel', 'cuda',  # Use 'cuda' or 'nvdec' depending on your system and ffmpeg build
+        '-i', crossfade_video,
+        '-vf', 'fps=30',
+        '-start_number', '0',  # Numbering starts from 0
+        os.path.join(train_main_folder, 'r_%d.png')  # Use %d without leading zeros
+    ]
+
+    # Run the command
+    subprocess.run(ffmpeg_command)
+    print("Frames extracted.")
+
+    # Step 2: Copy alpha channels
+    print("Copying alpha channels...")
+    source_dir = os.path.join(project_folder, 'train_main')  # Source images with alpha channel
+    dest_dir = train_main_folder  # Extracted frames
+
+    # Ensure that the destination folder exists
+    if not os.path.exists(dest_dir):
+        os.makedirs(dest_dir)
+
+    # List all PNG files in the destination folder (extracted frames)
+    png_files = [f for f in os.listdir(dest_dir) if f.endswith('.png')]
+
+    for file_name in png_files:
+        source_path = os.path.join(source_dir, file_name)
+        dest_path = os.path.join(dest_dir, file_name)
+
+        # Check if the source image exists
+        if not os.path.exists(source_path):
+            print(f"Source image not found: {source_path}")
+            continue
+
+        # Open the source and destination images
+        source_image = Image.open(source_path).convert("RGBA")
+        dest_image = Image.open(dest_path).convert("RGBA")
+
+        # Extract the alpha channel from the source image
+        source_alpha = source_image.split()[-1]
+
+        # Replace the alpha channel in the destination image
+        dest_image.putalpha(source_alpha)
+
+        # Save the updated image
+        dest_image.save(dest_path)
+
+    print("Alpha channels copied successfully.")
+
+    # Step 3: Split data into train, val, and test sets
+    print("Splitting data into train, val, and test sets...")
+    base_dir = train_main_folder  # Folder gs/train_main
+
+    train_dir = os.path.join(gs_folder, "train")
+    test_dir = os.path.join(gs_folder, "test")
+    val_dir = os.path.join(gs_folder, "val")
+
+    # Define proportions
+    train_prop = 0.8
+    test_prop = 0.05
+    val_prop = 0.15  # Proportions must sum up to 1
+
+    # Get all PNG files from the train_main folder
+    png_files = [f for f in os.listdir(base_dir) if f.endswith('.png')]
+    total_files = len(png_files)
+
+    # Shuffle the file list for random distribution
+    random.shuffle(png_files)
+
+    # Calculate the number of files for each set
+    train_count = int(total_files * train_prop)
+    test_count = int(total_files * test_prop)
+    val_count = total_files - train_count - test_count  # Remaining files go to val
+
+    # Split files according to proportions
+    train_files = png_files[:train_count]
+    test_files = png_files[train_count:train_count + test_count]
+    val_files = png_files[train_count + test_count:]
+
+    # Function to copy files from source to destination directory
+    def copy_files(file_list, source_dir, dest_dir):
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
+        for file in file_list:
+            shutil.copy(os.path.join(source_dir, file), os.path.join(dest_dir, file))
+
+    # Copy files to respective directories
+    copy_files(train_files, base_dir, train_dir)  # Copy files to train folder
+    copy_files(test_files, base_dir, test_dir)    # Copy files to test folder
+    copy_files(val_files, base_dir, val_dir)      # Copy files to val folder
+
+    # Function to create new JSON files for train, test, and val sets
+    def create_json(json_path, new_file_list, folder_name, main_json_path):
+        # Load data from the main JSON file
+        with open(main_json_path, 'r') as file:
+            data = json.load(file)
+        
+        # Remove '.png' extension from the file list to match paths in JSON
+        new_file_list_no_ext = [os.path.splitext(f)[0] for f in new_file_list]
+        
+        # Filter frames to include only those present in the new file list
+        new_frames = [frame for frame in data['frames'] if os.path.basename(frame['file_path']) in new_file_list_no_ext]
+
+        # Update file paths in JSON data to point to the new folder
+        for frame in new_frames:
+            frame['file_path'] = f"./{folder_name}/" + os.path.basename(frame['file_path'])
+        
+        # Create a new JSON data structure
+        new_data = {
+            "camera_angle_x": data.get('camera_angle_x', 0.6911112070083618),
+            "frames": new_frames
+        }
+
+        # Write new data to the JSON file
+        with open(json_path, 'w') as file:
+            json.dump(new_data, file, indent=4)
+
+    # Path to the main JSON file
+    main_json_path = os.path.join(project_folder, "transforms_train_main.json")
+
+    # Create new JSON files for train, test, and val sets
+    create_json(os.path.join(gs_folder, "transforms_train.json"), train_files, 'train', main_json_path)
+    create_json(os.path.join(gs_folder, "transforms_test.json"), test_files, 'test', main_json_path)
+    create_json(os.path.join(gs_folder, "transforms_val.json"), val_files, 'val', main_json_path)
+
+    print("Files copied and JSON files created successfully.")
+
+if __name__ == "__main__":
+    main()
+
+=== gs.bat ===
+
+@echo off
+setlocal enabledelayedexpansion
+
+REM Check if the target_folder argument is provided
+if "%~1"=="" (
+    echo Usage: %~nx0 target_folder
+    goto :eof
+)
+set "TARGET_FOLDER=%~1"
+
+REM Activate the environment
+call conda activate torch_gpu_test
+
+REM Define paths
+set "BASE_DIR=%TARGET_FOLDER%\gs"
+set "MODEL_PATH=%BASE_DIR%\gaussian_white"
+
+REM Path to the source transforms_train_main.json (located one folder above target_folder)
+set "TRAIN_MAIN_JSON=%TARGET_FOLDER%\..\transforms_train_main.json"
+
+REM Path to the transforms_test.json file in the gs folder
+set "TEST_JSON=%BASE_DIR%\transforms_test.json"
+
+REM Check if files exist
+if not exist "%TRAIN_MAIN_JSON%" (
+    echo File not found: %TRAIN_MAIN_JSON%
+    goto :eof
+)
+
+if not exist "%TEST_JSON%" (
+    echo File not found: %TEST_JSON%
+    goto :eof
+)
+
+REM Backup transforms_test.json
+echo Backing up transforms_test.json...
+copy "%TEST_JSON%" "%TEST_JSON%.bak" > nul
+
+REM Navigate to the Gaussian Splatting directory
+cd /d "C:\Users\jerzy\gaussian-splatting"
+
+REM Run training
+echo Running training...
+python train.py -s "%BASE_DIR%" --eval --model_path "%MODEL_PATH%"
+
+REM Check the return code after training
+if errorlevel 1 (
+    echo Training failed.
+    goto :eof
+)
+
+REM Replace the contents of transforms_test.json with transforms_train_main.json
+echo Replacing transforms_test.json with transforms_train_main.json...
+copy /Y "%TRAIN_MAIN_JSON%" "%TEST_JSON%" > nul
+
+REM Run rendering
+echo Running rendering...
+python render.py -s "%BASE_DIR%" --skip_train --model_path "%MODEL_PATH%"
+
+REM Check the return code after rendering
+if errorlevel 1 (
+    echo Rendering failed. Restoring original transforms_test.json...
+    move /Y "%TEST_JSON%.bak" "%TEST_JSON%" > nul
+    goto :eof
+)
+
+REM Restore the original transforms_test.json
+echo Restoring original transforms_test.json...
+move /Y "%TEST_JSON%.bak" "%TEST_JSON%" > nul
+
+echo Process completed successfully.
+endlocal
+
+=== join_video.py ===
+
+import os
+import subprocess
+import sys
+import argparse
+
+def combine_images_to_mp4(base_folder):
+    # Path to images inside the specified folder
+    images_path = os.path.join(base_folder, r"gs\gaussian_white\test\ours_30000\renders")
+    
+    # Check if the path exists
+    if not os.path.exists(images_path):
+        raise FileNotFoundError(f"Image path does not exist: {images_path}")
+    
+    # Folder name and output path for the result
+    base_name = os.path.basename(os.path.normpath(base_folder))
+    output_folder = os.path.join(os.path.dirname(base_folder))
+    output_file = os.path.join(output_folder, f"{base_name}.mp4")
+    
+    # Create the `ultimate` folder if it doesn't exist
+    os.makedirs(output_folder, exist_ok=True)
+    
+    # ffmpeg command to combine images
+    ffmpeg_command = [
+        "ffmpeg",
+        "-hwaccel", "cuda",                    # CUDA hardware acceleration
+        "-framerate", "30",                    # Frame rate
+        "-start_number", "0",                  # Specify the starting file number
+        "-i", os.path.join(images_path, "%05d.png"),  # Input images (00000.png, 00001.png, ...)
+        "-c:v", "libx264",                     # H.264 codec (universal)
+        "-preset", "fast",                     # Speed preset
+        "-pix_fmt", "yuv420p",                 # Pixel format for compatibility
+        output_file                            # Output file
+]
+    # Execute the command
+    try:
+        subprocess.run(ffmpeg_command, check=True)
+        print(f"Video successfully created: {output_file}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing ffmpeg: {e}")
+    except FileNotFoundError:
+        print("Error: ffmpeg not found. Make sure it is installed and available in the PATH.")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Recombine frames back to video")
+    parser.add_argument('--target_folder', type=str, required=True, help='Path to the target folder.')
+    args = parser.parse_args()
+
+    base_folder = args.target_folder
+    combine_images_to_mp4(base_folder)
+
+=== loop.py ===
+
+import subprocess
+import os
+import sys
+
+
+def run_script(script_path, args, shell=False):
+    """
+    Executes a Python script or batch file with the specified arguments.
+    """
+    if script_path.endswith(".py"):
+        command = [sys.executable, script_path] + args
+    else:  # Assume it's a batch file
+        command = [script_path] + args
+    try:
+        subprocess.run(command, check=True, shell=shell)
+        print(f"Successfully executed: {script_path}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing {script_path}: {e}")
+        sys.exit(1)
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Automate iterative execution of a script.")
+    # Required parameters
+    parser.add_argument("--main_folder", type=str, help="Main folder for storing iterations.")
+    parser.add_argument("--prompt", type=str, help="Prompt for guiding the process.")
+    # Optional parameters
+    parser.add_argument("--start", type=int, default=0, help="Starting iteration index (default: 0).")
+    parser.add_argument("--end", type=int, default=1, help="Ending iteration index (default: 1).")
+    parser.add_argument("--fps", type=int, help="Frames per second.")
+    parser.add_argument("--batch_size", type=int, help="Batch size for processing.")
+    parser.add_argument("--sides", type=int, help="Sides parameter.")
+    parser.add_argument("--resolution", type=int, help="Height resolution for frames.")
+    parser.add_argument("--max_frames", type=int, help="Maximum number of frames.")
+    parser.add_argument("--border_frames", type=int, help="Number of border frames.")
+    parser.add_argument("--ebsynth_mode", type=bool, help="Ebsynth mode toggle.")
+    parser.add_argument("--output_resolution", type=int, help="Output resolution for EbSynth.")
+
+    args = parser.parse_args()
+
+    # Path to the original script
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    original_script = os.path.join(current_dir, "automate_process.py")
+
+    # Shared optional parameters
+    shared_params = {
+        "fps": args.fps,
+        "batch_size": args.batch_size,
+        "sides": args.sides,
+        "resolution": args.resolution,
+        "max_frames": args.max_frames,
+        "border_frames": args.border_frames,
+        "ebsynth_mode": args.ebsynth_mode,
+        "output_resolution": args.output_resolution,
+    }
+    shared_params = {k: v for k, v in shared_params.items() if v is not None}  # Remove None values
+
+    # Perform iterations
+    for i in range(args.start + 1, args.end + 1):
+        video_path = os.path.join(args.main_folder, f"iter{i - 1}.mp4")
+        target_folder = os.path.join(args.main_folder, f"iter{i}")
+
+        # Check if the video exists
+        if not os.path.exists(video_path):
+            print(f"Error: Video file {video_path} does not exist. Skipping iteration {i}.")
+            continue
+
+        # Build arguments for the original script
+        script_args = [
+            "--video_path", video_path,
+            "--target_folder", target_folder,
+            "--prompt", args.prompt,
+        ]
+        for key, value in shared_params.items():
+            script_args.extend([f"--{key}", str(value)])
+
+        print(f"\nStarting iteration {i}...")
+        print(f"Video Path: {video_path}")
+        print(f"Target Folder: {target_folder}")
+
+        # Execute the original script
+        run_script(original_script, script_args)
+
+    print(f"\nAll iterations from {args.start} to {args.end} completed successfully.")
+
+
+if __name__ == "__main__":
+    main()
+
+=== prepare_ebsynth.py ===
+
+import argparse
+import os
+import sys
+import re
+import numpy as np
+from PIL import Image
+
+# Add the TemporalKit directory to sys.path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, "extensions", "TemporalKit")))
+sys.path.append(os.path.abspath(os.path.join(current_dir, "extensions", "TemporalKit", "scripts")))
+
+# Import necessary modules from TemporalKit
+import Ebsynth_Processing as ebsynth
+import berry_utility as sd_utility
+
+def update_settings_from_file(folderpath):
+    read_path = os.path.join(folderpath, "batch_settings.txt")
+    border = None
+    print(f"batch settings exists = {os.path.exists(read_path)}")
+    if not os.path.exists(read_path):
+        read_path = os.path.join(folderpath, "0", "batch_settings.txt")
+        video_path = os.path.join(folderpath, "main_video.mp4")
+        transition_data_path = os.path.join(folderpath, "transition_data.txt")
+        if os.path.exists(transition_data_path):
+            with open(transition_data_path, "r") as b:
+                merge = str(b.readline().strip())
+                border_line = b.readline().strip()
+                if border_line == 'None':
+                    border = None
+                else:
+                    border = int(border_line)
+    else:
+        video_path = os.path.join(folderpath, "input_video.mp4")
+    print(f"reading path at {read_path}")
+    with open(read_path, "r") as f:
+        fps_line = f.readline().strip()
+        sides_line = f.readline().strip()
+        batch_size_line = f.readline().strip()
+        video_path_in_settings = f.readline().strip()
+        max_frames_line = f.readline().strip()
+        border_line = f.readline().strip()
+
+        # Convert strings to the appropriate types, handling 'None'
+        fps = int(fps_line) if fps_line != 'None' else None
+        sides = int(sides_line) if sides_line != 'None' else None
+        batch_size = int(batch_size_line) if batch_size_line != 'None' else None
+        max_frames = int(max_frames_line) if max_frames_line != 'None' else None
+        if border is None:
+            border = int(border_line) if border_line != 'None' else None
+    return fps, sides, batch_size, video_path, max_frames, border
+
+def atoi(text):
+    return int(text) if text.isdigit() else text
+
+def natural_keys(text):
+    return [atoi(c) for c in re.split(r'(\d+)', text)]
+
+def read_images_folder(folder_path):
+    images = []
+    filenames = os.listdir(folder_path)
+    
+    # Sort files based on the order of numbers in their names
+    filenames.sort(key=natural_keys)
+
+    for filename in filenames:
+        # Check if the file is an image
+        if (filename.endswith('.jpg') or filename.endswith('.png') or filename.endswith('.jpeg')) and (not re.search(r'-\d', filename)):
+            if re.match(r".*(input).*", filename):
+                img = Image.open(os.path.join(folder_path, filename))
+                images.append(np.array(img))
+            else:
+                print(f"[{filename}] File name must contain \"input\". Skipping.")
+    return images
+
+def post_process_ebsynth(input_folder, video, fps, per_side, output_resolution, batch_size, max_frames, border_frames):
+    input_images_folder = os.path.join(input_folder, "output")
+    images = read_images_folder(input_images_folder)
+    print(f"Number of images: {len(images)}")
+    split_mode = os.path.join(input_folder, "keys")
+    if os.path.exists(split_mode):
+        ebsynth.sort_into_folders(
+            video_path=video,
+            fps=fps,
+            per_side=per_side,
+            batch_size=batch_size,
+            _smol_resolution=output_resolution,
+            square_textures=images,
+            max_frames=max_frames,
+            output_folder=input_folder,
+            border=border_frames
+        )
+    else:
+        img_folder = os.path.join(input_folder, "output")
+        pattern = r'^\d+$'
+        all_dirs = os.listdir(input_folder)
+        numeric_dirs = sorted([d for d in all_dirs if re.match(pattern, d)], key=lambda x: int(x))
+        if max_frames is not None:
+            max_frames += border_frames
+        for d in numeric_dirs:
+            img_names = []
+            folder_video = os.path.join(input_folder, d, "input_video.mp4")
+            for img_file in os.listdir(img_folder):
+                if re.match(f"^{d}and\d+.*\.png$", img_file):
+                    img_names.append(img_file)
+            print(f"Processing: {os.path.dirname(folder_video)}")
+            square_textures = []
+            for img_name in sorted(img_names, key=lambda x: int(re.search(r'and(\d+)', img_name).group(1))):
+                img = Image.open(os.path.join(input_images_folder, img_name))
+                print(f"Saving {os.path.join(input_images_folder, img_name)}")
+                square_textures.append(np.array(img))
+            ebsynth.sort_into_folders(
+                video_path=folder_video,
+                fps=fps,
+                per_side=per_side,
+                batch_size=batch_size,
+                _smol_resolution=output_resolution,
+                square_textures=square_textures,
+                max_frames=max_frames,
+                output_folder=os.path.dirname(folder_video),
+                border=border_frames
+            )
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--target_folder", type=str, required=True, help="Path to the project folder")
+    parser.add_argument("--output_resolution", type=int, default=512, help="Output resolution for EbSynth")
+    args = parser.parse_args()
+
+    # Read settings from the saved file
+    fps, per_side, batch_size, video_path, max_frames, border_frames = update_settings_from_file(args.target_folder)
+    output_resolution = args.output_resolution
+
+    input_video = os.path.join(args.target_folder, "input_video.mp4")
+
+    # Run the preparation function
+    post_process_ebsynth(
+        input_folder=args.target_folder,
+        video=input_video,
+        fps=fps,
+        per_side=per_side,
+        output_resolution=output_resolution,
+        batch_size=batch_size,
+        max_frames=max_frames,
+        border_frames=border_frames
+    )
+
+=== preprocess_video.py ===
+
+import argparse
+import os
+import shutil
+import sys
+
+# Add the TemporalKit directory to sys.path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, "extensions", "TemporalKit")))
+sys.path.append(os.path.abspath(os.path.join(current_dir, "extensions", "TemporalKit", "scripts")))
+
+from scripts.Ebsynth_Processing import sort_into_folders
+
+from extensions.TemporalKit.scripts.Berry_Method import generate_squares_to_folder
+
+def preprocess_video(video_path, target_folder, fps, batch_size, sides, resolution, max_frames, border_frames, ebsynth_mode, max_frames_to_save):
+    # Create target folder if it doesn't exist
+    os.makedirs(target_folder, exist_ok=True)
+
+    # Copy input video to the target folder
+    target_video_path = os.path.join(target_folder, "input_video.mp4")
+    shutil.copy(video_path, target_video_path)
+
+    print("Generating squares and saving them in the appropriate directories...")
+    generate_squares_to_folder(
+        video_path=target_video_path,
+        fps=fps,
+        batch_size=batch_size,
+        resolution=resolution,
+        size_size=sides,
+        max_frames=max_frames,
+        output_folder=target_folder,
+        border=border_frames,
+        ebsynth_mode=ebsynth_mode,
+        max_frames_to_save=max_frames_to_save
+    )
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--video_path", type=str, help="Path to the video to be pre-processed")
+    parser.add_argument("--target_folder", type=str, required=True, help="Target folder to save pre-processed frames")
+    parser.add_argument("--fps", type=int, default=30, help="Frames per second")
+    parser.add_argument("--batch_size", type=int, default=8, help="Frames per keyframe")
+    parser.add_argument("--sides", type=int, default=4, help="Sides parameter")
+    parser.add_argument("--resolution", type=int, default=1536, help="Height resolution for frames")
+    parser.add_argument("--max_frames", type=int, default=144, help="Maximum number of frames")
+    parser.add_argument("--border_frames", type=int, default=2, help="Number of border frames")
+    parser.add_argument("--ebsynth_mode", type=bool, default=True, help="Ebsynth Mode")
+    parser.add_argument("--max_frames_to_save", type=int, default=None, help="Maximum number of frames to save")
+
+    args = parser.parse_args()
+    preprocess_video(args.video_path, args.target_folder, args.fps, args.batch_size, args.sides, args.resolution, args.max_frames, args.border_frames, args.ebsynth_mode, args.max_frames_to_save)
+
+=== process_collage.py ===
+
+import requests
+import base64
+import os
+import argparse
+import io
+import json
+from PIL import Image, PngImagePlugin
+from datetime import datetime
+
+def timestamp():
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+def encode_file_to_base64(path):
+    with open(path, 'rb') as file:
+        return base64.b64encode(file.read()).decode('utf-8')
+
+def decode_and_save_base64(base64_str, save_path):
+    with open(save_path, "wb") as file:
+        file.write(base64.b64decode(base64_str))
+
+def call_img2img_api(payload, output_path, server):
+    url = f"http://{server}/sdapi/v1/img2img"
+    headers = {'Content-Type': 'application/json'}
+    data = json.dumps(payload)
+
+    response = requests.post(url, headers=headers, data=data)
+
+    if response.status_code == 200:
+        result = response.json()
+        img_str = result['images'][0]
+        img_data = base64.b64decode(img_str)
+        image = Image.open(io.BytesIO(img_data))
+        if 'info' in result:
+            pnginfo = PngImagePlugin.PngInfo()
+            pnginfo.add_text("parameters", result['info'])
+            image.save(output_path, pnginfo=pnginfo)
+        else:
+            image.save(output_path)
+        print(f"Processed image saved to {output_path}")
+    else:
+        print(f"Error: {response.status_code}")
+        print(response.text)
+
+def main():
+    parser = argparse.ArgumentParser(description="Process an image using Stable Diffusion, ControlNet, and Refiner.")
+    parser.add_argument("--target_folder", type=str, required=True, help="Path to the project folder.")
+    parser.add_argument("--prompt", type=str, required=True, help="Prompt for image generation.")
+    parser.add_argument("--negative_prompt", type=str, default="", help="Negative prompt.")
+    parser.add_argument("--server", type=str, default="127.0.0.1:7860", help="Address of the Automatic1111 server.")
+    args = parser.parse_args()
+
+    # Define paths
+    input_image_path = os.path.join(args.target_folder, "input", "input0.png")
+    controlnet_image_path = input_image_path  # Use the same image for ControlNet
+    output_dir = os.path.join(args.target_folder, "output")
+    output_image_path = os.path.join(output_dir, "00000-input0.png")
+
+    # Ensure the output directory exists
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Check for the input image
+    if not os.path.exists(input_image_path):
+        print(f"Input image not found: {input_image_path}")
+        return
+
+    # Encode images to base64
+    init_image_base64 = encode_file_to_base64(input_image_path)
+    controlnet_image_base64 = encode_file_to_base64(controlnet_image_path)
+
+    # Form payload
+    payload = {
+        "init_images": [init_image_base64],
+        "resize_mode": 0,
+        "denoising_strength": 0.9,
+        "image_cfg_scale": 1.5,
+        "mask": None,
+        "mask_blur": 4,
+        "inpainting_fill": 1,
+        "inpaint_full_res": False,
+        "inpaint_full_res_padding": 32,
+        "inpainting_mask_invert": 0,
+        "initial_noise_multiplier": 1,
+        "prompt": args.prompt,
+        "styles": [],
+        "seed": -1,
+        "subseed": -1,
+        "subseed_strength": 0,
+        "seed_resize_from_h": -1,
+        "seed_resize_from_w": -1,
+        "sampler_name": "DPM++ 2M",
+        "batch_size": 1,
+        "n_iter": 1,
+        "steps": 30,
+        "cfg_scale": 9,
+        "width": 1536,
+        "height": 1536,
+        "restore_faces": False,
+        "tiling": False,
+        "do_not_save_samples": False,
+        "do_not_save_grid": False,
+        "negative_prompt": args.negative_prompt,
+        "eta": 0,
+        "s_churn": 0,
+        "s_tmax": None,
+        "s_tmin": 0,
+        "s_noise": 1,
+        "override_settings": {
+            "samples_filename_pattern": "input0",
+            "save_to_dirs": False
+        },
+        "override_settings_restore_afterwards": True,
+        "sampler_index": "DPM++ 2M",
+        "script_name": None,
+        "send_images": True,
+        "save_images": False,
+        "alwayson_scripts": {
+            "ControlNet": {
+                "args": [
+                    {
+                        "enabled": True,
+                        "input_image": controlnet_image_base64,
+                        "mask": None,
+                        "module": "canny",
+                        "model": "control_v11p_sd15_canny [d14c016b]",
+                        "weight": 1.0,
+                        "resize_mode": "Crop and Resize",
+                        "low_vram": True,
+                        "processor_res": 512,
+                        "threshold_a": 100.0,
+                        "threshold_b": 200.0,
+                        "guidance_start": 0.0,
+                        "guidance_end": 1.0,
+                        "control_mode": "ControlNet is more important",
+                        "pixel_perfect": True,
+                        "advanced_weighting": None,
+                        "animatediff_batch": False,
+                        "batch_image_files": [],
+                        "batch_images": os.path.join(args.target_folder, "input"),
+                        "batch_keyframe_idx": None,
+                        "batch_mask_dir": None,
+                        "batch_modifiers": [],
+                        "effective_region_mask": None,
+                        "hr_option": "Both",
+                        "inpaint_crop_input_image": True,
+                        "input_mode": "simple",
+                        "ipadapter_input": None,
+                        "is_ui": True,
+                        "loopback": False,
+                        "output_dir": os.path.join(args.target_folder, "output"),
+                        "pulid_mode": "Fidelity",
+                        "save_detected_map": True
+                    }
+                ]
+            },
+            "Refiner": {
+                "args": [
+                    True,
+                    "v1-5-pruned-emaonly.safetensors [6ce016689]",
+                    0.8
+                ]
+            }
+        }
+    }
+
+    call_img2img_api(payload, output_image_path, args.server)
+
+if __name__ == "__main__":
+    main()
+
+=== README.md ===
+
+# GS_diffusion
+This repository is part of the research conducted under the [Implicit Deepfake](https://github.com/quereste/implicit-deepfake) project. The primary goal of that project is to explore techniques for generating and manipulating 3D models using implicit representations. This experiment extends this work by focusing on the transformation of a 3D Blender model into a new 3D model using Gaussian Splatting through Stable Diffusion.
+
+## Reproducing the Results
+
+### Tools
+
+To reproduce the results of this experiment, you will need to install the following tools:
+- [**Blender**](https://www.blender.org/)
+- [**Gaussian Splatting**](https://github.com/graphdeco-inria/gaussian-splatting)
+- [**Stable Diffusion**](https://github.com/AUTOMATIC1111/stable-diffusion-webui)
+- [**EbSynth**](https://ebsynth.com/)
+- [**ffmpeg**](https://ffmpeg.org/)
+
+### Steps to Reproduce the Experiment
+
+1. **Render Images from Blender**  
+   Render a series of images from your 3D model in Blender. These images will serve as the input for the diffusion process. We recommend performing 360 degrees video render to ensure consistency while applying diffusion
+   [An example open source 3D model](https://sketchfab.com/3d-models/tina-head-530fab5eb2aa44f699052624794aeaa9)
+
+2. **Apply Diffusion using Stable Diffusion**
+   Use Stable Diffusion to apply transformations defined by a prompt to the rendered frames.
+   The process of applying Stable Diffusion that ensures the highest consistency of the result across among different angles along with optimal parameters is described [here](https://stable-diffusion-art.com/video-to-video/#Method_5_Temporal_Kit) and requires the use of EbSynth
+
+4. **Convert Rendered Images to a 3D Model using Gaussian Splatting**  
+   Feed the transformed images into the Gaussian Splatting process to generate the final 3D model.
+
+### Results
+
+After completing the experiment, the following results were observed:
+
+![result_0](https://github.com/user-attachments/assets/c5a3b2c6-1c72-4b2a-83a4-c6f61ff258a1)
+
+Used prompts:
+positive - "Photo of a bronze bust of a woman, detailed and lifelike, in the style of Auguste Rodin, polished bronze, classical sculpture aesthetics, 32k uhd, timeless and elegant, intricate details, full head and shoulders, museum quality, realistic texture, warm bronze tones, photorealistic, black background."
+negative - "Deformed, disfigured, ugly."
+
+![result_1](https://github.com/user-attachments/assets/b35b4082-7efc-4ad8-975a-29bb8ca5dec7)
+
+Used prompts:
+positive - "Photo of a head with realistic facial features, hair color changed to vibrant red, smooth and lifelike skin texture, sharp and expressive eyes, natural human proportions, high-definition detail, consistent appearance from all angles (front, side, back view), cinematic composition, trending on ArtStation."
+negative - "Unrealistic colors, distorted proportions, blurred details, heavy shadows, lack of detail."
+
+![result_2](https://github.com/user-attachments/assets/75e50f82-d48d-4c38-8341-dadb27d210f1)
+
+Used prompts:
+positive - "An elf, with pointed ears, ethereal and elegant features, detailed and lifelike, in the style of Alan Lee, smooth and flawless skin, sharp and expressive eyes, long and flowing hair, otherworldly and mystical appearance, 32k uhd, high-definition detail, wearing simple yet stylish elven attire, black background, cinematic lighting, photorealistic, studio portrait."
+negative - "Distorted, disfigured, ugly, human features, unrealistic proportions, poor lighting, low detail."
+
+### TODO:
+Explore improvements by iteratively applying Stable Diffusion (after the first step, it may be better to use [this approach](https://stable-diffusion-art.com/video-to-video/#Method_2_ControlNet_img2img) along with the DDIM Sampler) and Gaussian Splatting on the resulting models. The hypothesis is that Gaussian Splatting increases consistency between adjacent frames, while Stable Diffusion enhances quality.
+
+Results from the first experiment:
+
+![output_combined-ezgif com-video-to-gif-converter](https://github.com/user-attachments/assets/50c06644-d332-4141-a1ab-c90802ba5e27)
+
+### Scripts to reproduce the results (only Windows)
+First you need to install the software mentioned in **Tools** Section (we provide example dataset in the [link](https://ujchmura-my.sharepoint.com/:f:/g/personal/georgii_stanishevskii_student_uj_edu_pl/Ei93fzknaspDp0sxhWXdLrABSdBNXTFAv_dIHjPHHxWFEA?e=flv8KE), in such case you do not need Blender)
+Then copy all the scripts listed in this repository into stable Automatic1111 folder, run Stable Diffusion with --api parameter and open the folder in CMD Terminal (Powershell may not work properly). Activate venv located in .\venv\Scripts\activate.bat
+
+**Usage**
+python loop.py /path/to/main_folder "My Prompt" --start 0 --end 3 (optional parameters)
+
+Main folder should contain video render of the object and transforms json. There are additional optional parameters (resolution, fps, etc.) which I will add later to the description. Code will generate (end - start) folders named as iter1, iter2, etc. which will contain gaussian splatting model and generated frames. Video results (360 degrees renders) will appear in main_folder named as iter1.mp4, iter2.mp4, ...
+In the middle of generating process the program will pause and wait till you use EbSynth program to propagate changes from diffusion to all frames. Unfortunately you need to do it manually.
+
+### TODO:
+metrics for 3 faces 10 iterations:
+
+Results from the second experiment:
+
+![ezgif-2-14c20ef111](https://github.com/user-attachments/assets/a6d14863-d3e4-4e19-ad65-e4184b746dd8)
+
+
+
+
+
+=== recombine_ebsynth.py ===
+
+import argparse
+import os
+import sys
+import re
+
+# Add the TemporalKit directory to sys.path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.abspath(os.path.join(current_dir, "extensions", "TemporalKit")))
+sys.path.append(os.path.abspath(os.path.join(current_dir, "extensions", "TemporalKit", "scripts")))
+
+# Import necessary modules
+import Ebsynth_Processing as ebsynth
+import berry_utility as sd_utility
+
+def update_settings_from_file(folderpath):
+    read_path = os.path.join(folderpath, "batch_settings.txt")
+    border = None
+    print(f"batch settings exists = {os.path.exists(read_path)}")
+    if not os.path.exists(read_path):
+        read_path = os.path.join(folderpath, "0", "batch_settings.txt")
+        video_path = os.path.join(folderpath, "main_video.mp4")
+        transition_data_path = os.path.join(folderpath, "transition_data.txt")
+        if os.path.exists(transition_data_path):
+            with open(transition_data_path, "r") as b:
+                merge = str(b.readline().strip())
+                border_line = b.readline().strip()
+                if border_line == 'None':
+                    border = None
+                else:
+                    border = int(border_line)
+    else:
+        video_path = os.path.join(folderpath, "input_video.mp4")
+    print(f"reading path at {read_path}")
+    with open(read_path, "r") as f:
+        fps_line = f.readline().strip()
+        sides_line = f.readline().strip()
+        batch_size_line = f.readline().strip()
+        video_path_in_settings = f.readline().strip()
+        max_frames_line = f.readline().strip()
+        border_line = f.readline().strip()
+
+        # Convert strings to appropriate types, handling 'None'
+        fps = int(fps_line) if fps_line != 'None' else None
+        sides = int(sides_line) if sides_line != 'None' else None
+        batch_size = int(batch_size_line) if batch_size_line != 'None' else None
+        max_frames = int(max_frames_line) if max_frames_line != 'None' else None
+        if border is None:
+            border = int(border_line) if border_line != 'None' else None
+    return fps, sides, batch_size, video_path, max_frames, border
+
+def recombine_ebsynth(input_folder, fps, border_frames, batch_size):
+    if os.path.exists(os.path.join(input_folder, "keys")):
+        output_video = ebsynth.crossfade_folder_of_folders(
+            input_folder,
+            fps=fps,
+            return_generated_video_path=True
+        )
+        print(f"Generated video: {output_video}")
+    else:
+        generated_videos = []
+        pattern = r'^\d+$'
+        all_dirs = os.listdir(input_folder)
+        numeric_dirs = sorted([d for d in all_dirs if re.match(pattern, d)], key=lambda x: int(x))
+        for d in numeric_dirs:
+            folder_loc = os.path.join(input_folder, d)
+            new_video = ebsynth.crossfade_folder_of_folders(folder_loc, fps=fps)
+            generated_videos.append(new_video)
+        overlap_data_path = os.path.join(input_folder, "transition_data.txt")
+        with open(overlap_data_path, "r") as f:
+            merge = str(f.readline().strip())
+        overlap_indices = []
+        int_list = eval(merge)
+        for num in int_list:
+            overlap_indices.append(int(num))
+        output_video = sd_utility.crossfade_videos(
+            video_paths=generated_videos,
+            fps=fps,
+            overlap_indexes=overlap_indices,
+            num_overlap_frames=border_frames,
+            output_path=os.path.join(input_folder, "output.mp4")
+        )
+        print(f"Generated video: {output_video}")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--target_folder", type=str, required=True, help="Path to the project folder")
+    args = parser.parse_args()
+
+    # Read settings from the saved file
+    fps, per_side, batch_size, video_path, max_frames, border_frames = update_settings_from_file(args.target_folder)
+
+    # Check values for None and set default values if necessary
+    if fps is None:
+        fps = 30  # Set a default value or raise an error
+    if border_frames is None:
+        border_frames = 0  # Or set a default value
+
+    # Run the recombination function
+    recombine_ebsynth(
+        input_folder=args.target_folder,
+        fps=fps,
+        border_frames=border_frames,
+        batch_size=batch_size
+    )
