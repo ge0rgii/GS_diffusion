@@ -40,7 +40,7 @@
 * **Task 1.3: Implement TemporalKit Path Setup (`utils.py`)**
     * **Current State:** `gs_pipeline/utils.py` содержит функцию `load_config`.
     * **Target State:** `gs_pipeline/utils.py` содержит функцию `setup_temporal_kit_path(config)`, которая читает `paths.a1111_extensions_dir` из словаря `config`, проверяет существование путей к `TemporalKit` и `TemporalKit/scripts`, добавляет их в `sys.path` через `sys.path.insert(0, ...)`. Функция использует глобальный флаг `_temporal_kit_paths_added`, чтобы выполняться только один раз, и выводит информационные сообщения или ошибки. Добавлен `import sys`.
-    * **Status:** [ ] To Do # <-- Начинаем этот таск
+    * **Status:** [X] To Do # <-- Начинаем этот таск
 
 * **Task 1.4: Implement Subprocess Utility (`utils.py`)**
     * (...) Status: [ ] To Do
