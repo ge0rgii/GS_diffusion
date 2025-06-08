@@ -85,11 +85,12 @@ The authors propose to embed the diffusion process inside a pretrained auto-enco
 
 **Pipeline overview**
 
-1. **Encode** – an image \(x\) is compressed by an encoder \(E\) to a latent tensor \(z = E(x)\).  
-2. **Diffuse & Denoise in Latent Space** – the DDPM/SDE process operates on \(z\), training a U-Net to predict noise in the latent domain. 
-3. **Decode** – after the reverse diffusion yields \(\hat{z}\), a decoder \(D\) reconstructs the final high-resolution image \(\hat{x}=D(\hat{z})\).  
+1. **Encode** – an image $x$ is compressed by an encoder $E$ to a latent tensor $z = E(x)$.  
+2. **Diffuse & Denoise in Latent Space** – the DDPM/SDE process operates on $z$, training a U-Net to predict noise in the latent domain.  
+3. **Decode** – after the reverse diffusion yields $\hat{z}$, a decoder $D$ reconstructs the final high-resolution image $\hat{x}=D(\hat{z})$.  
 
-Because \(h{\,\times\,}w \ll H{\,\times\,}W\) (e.g., \(64{\times}64\) vs.\ \(512{\times}512\)), training and inference become tractable on a single GPU while maintaining photorealistic detail. Subsequent work—most notably **Stable Diffusion**—extends this framework with text conditioning and **ControlNet** branches for structural guidance. 
+Because $h\times w \ll H\times W$ (e.g., $64\times64$ vs. $512\times512$), training and inference become tractable on a single GPU while maintaining photorealistic detail. Subsequent work—most notably **Stable Diffusion**—extends this framework with text conditioning and **ControlNet** branches for structural guidance.
+
 
 #### Text-Prompt Guidance in Diffusion Models
 
