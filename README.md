@@ -143,9 +143,9 @@ Because the algorithm works in image space, it inherits the exact style of the a
 | Key-frame count | 9 – 16 well-chosen views usually suffice for a 360 ° turntable; add more only when topology changes drastically. |
 | Resolution | Keep the rendered frames and painted key frames at the same native resolution to avoid resampling artefacts. |
 | Integration with A1111 | The community extension `CiaraStrawberry/TemporalKit` can automate the call from Stable Diffusion to EbSynth if you prefer a single click workflow. |
-#### Role in our 3-D pipeline
+#### Role in our 3D pipeline
 
-After Stable Diffusion + ControlNet generates high-quality but *per-key-frame* stylised renders, EbSynth sweeps through the sequence and harmonises consistency of transformed frames across time. This step is crucial before we pass the imagery to **Gaussian Splatting**, because temporal consistency directly improves the quality of the reconstructed 3-D point-cloud.
+After Stable Diffusion + ControlNet generates high-quality but *per-key-frame* stylised renders, EbSynth sweeps through the sequence and harmonises consistency of transformed frames across time. This step is crucial before we pass the imagery to **Gaussian Splatting**, because temporal consistency directly improves the quality of the reconstructed 3D point-cloud.
 
 
 
