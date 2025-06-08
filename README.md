@@ -80,16 +80,16 @@ Results from the second experiment:
 ![image](https://github.com/user-attachments/assets/60137b42-23e0-4d10-84f4-4e3e1f42be9e)
 
 **Latent Diffusion Models** were introduced by Rombach *et al.* in  
-*“High-Resolution Image Synthesis with Latent Diffusion Models”* (arXiv : 2112.10752, 20 Dec 2021). :contentReference[oaicite:0]{index=0}  
+*“High-Resolution Image Synthesis with Latent Diffusion Models”* (arXiv : 2112.10752, 20 Dec 2021). 
 The authors propose to embed the diffusion process inside a pretrained auto-encoder so that all noisy forward / denoising reverse steps run **in a much lower-dimensional latent space** rather than in pixel space. This design slashes memory and compute while preserving visual fidelity, and it underpins Stable Diffusion.
 
 **Pipeline overview**
 
 1. **Encode** – an image \(x\) is compressed by an encoder \(E\) to a latent tensor \(z = E(x)\).  
-2. **Diffuse & Denoise in Latent Space** – the DDPM/SDE process operates on \(z\), training a U-Net \( \epsilon_\theta \) to predict noise in the latent domain. :contentReference[oaicite:1]{index=1}  
+2. **Diffuse & Denoise in Latent Space** – the DDPM/SDE process operates on \(z\), training a U-Net to predict noise in the latent domain. 
 3. **Decode** – after the reverse diffusion yields \(\hat{z}\), a decoder \(D\) reconstructs the final high-resolution image \(\hat{x}=D(\hat{z})\).  
 
-Because \(h{\,\times\,}w \ll H{\,\times\,}W\) (e.g., \(64{\times}64\) vs.\ \(512{\times}512\)), training and inference become tractable on a single GPU while maintaining photorealistic detail. Subsequent work—most notably **Stable Diffusion**—extends this framework with text conditioning and **ControlNet** branches for structural guidance. :contentReference[oaicite:2]{index=2}
+Because \(h{\,\times\,}w \ll H{\,\times\,}W\) (e.g., \(64{\times}64\) vs.\ \(512{\times}512\)), training and inference become tractable on a single GPU while maintaining photorealistic detail. Subsequent work—most notably **Stable Diffusion**—extends this framework with text conditioning and **ControlNet** branches for structural guidance. 
 
 #### Text-Prompt Guidance in Diffusion Models
 
@@ -98,13 +98,13 @@ The mechanism was formalised in the OpenAI paper *“GLIDE: Towards Photorealist
 
 Two guidance strategies proved especially effective:
 
-| Strategy | Idea | Reference |
-|----------|------|-----------|
-| **CLIP Guidance** | During sampling, use the CLIP image encoder to rank intermediate images by semantic similarity to the prompt and nudge the diffusion trajectory towards higher-ranked samples. | :contentReference[oaicite:1]{index=1} |
-| **Classifier-Free Guidance (CFG)** | Train the model with and without a prompt (empty string) and, at inference, interpolate between the two predictions to trade diversity for fidelity. | :contentReference[oaicite:2]{index=2} |
+| Strategy | Idea |
+|----------|------|
+| **CLIP Guidance** | During sampling, use the CLIP image encoder to rank intermediate images by semantic similarity to the prompt and nudge the diffusion trajectory towards higher-ranked samples. | 
+| **Classifier-Free Guidance (CFG)** | Train the model with and without a prompt (empty string) and, at inference, interpolate between the two predictions to trade diversity for fidelity. | 
 
 This text-conditioning recipe underpins **Stable Diffusion**:  
-* v1.x checkpoints inherit the *pre-trained* OpenAI CLIP encoder used in GLIDE and DALL·E 2. :contentReference[oaicite:3]{index=3}  
+* v1.x checkpoints inherit the *pre-trained* OpenAI CLIP encoder used in GLIDE and DALL·E 2.  
 * v2.x replaces it with **OpenCLIP**—a from-scratch replication trained on the LAION-2B dataset—which improves prompt adherence and removes the need for proprietary weights. :contentReference[oaicite:4]{index=4}  
 
 In short, a prompt such as  
@@ -116,7 +116,7 @@ is converted into a CLIP embedding that conditions **every** denoising step, yie
 ![image](https://github.com/user-attachments/assets/a101b591-9108-4b67-a9c9-4c1c7ad652d2)
 
 **ControlNet** adds an *extra, trainable branch* to a **frozen** text-guided Latent Diffusion Model so that generation can be steered by pixel-aligned inputs such as edge maps, depth, pose, or segmentation. :contentReference[oaicite:0]{index=0}  
-A duplicate of the U-Net encoder–decoder receives the condition map \(c\); its layers are connected to the frozen backbone through **zero-initialised 1 × 1 convolutions**, which output zeros at the start of training and therefore leave the base model’s behaviour untouched. :contentReference[oaicite:1]{index=1}  
+A duplicate of the U-Net encoder–decoder receives the condition map \(c\); its layers are connected to the frozen backbone through **zero-initialised 1 × 1 convolutions**, which output zeros at the start of training and therefore leave the base model’s behaviour untouched.
 During fine-tuning, these “ZeroConvs” gradually learn a residual that injects just enough spatial information to satisfy \(c\), allowing robust training even on datasets as small as 50 k pairs and preventing catastrophic drift. :contentReference[oaicite:2]{index=2}  
 Official checkpoints cover Canny edges, depth, OpenPose skeletons, normal maps, and more, and the **ControlNet 1.1** release adds “guess-mode” and cached feature variants for ~45 % faster inference. :contentReference[oaicite:3]{index=3}  
 
@@ -129,24 +129,22 @@ Official checkpoints cover Canny edges, depth, OpenPose skeletons, normal maps, 
 #### How it works
 
 1. **Key-frame stylisation** – The user paints or edits one (or more) reference frames with any 2-D tool.  
-2. **Guidance map computation** – Dense correspondences between the key frame(s) and each target frame are estimated (usually with optical flow). :contentReference[oaicite:1]{index=1}  
-3. **PatchMatch transfer** – For every patch in the target frame, EbSynth finds the best-matching patch in the key frame and copies its pixels; a confidence map weights the blending. :contentReference[oaicite:2]{index=2}  
-4. **Edge-aware blending & refinement** – Overlaps are resolved with guided filtering; an optional temporal pass enforces consistency over successive frames. :contentReference[oaicite:3]{index=3}  
+2. **Guidance map computation** – Dense correspondences between the key frame(s) and each target frame are estimated (usually with optical flow).  
+3. **PatchMatch transfer** – For every patch in the target frame, EbSynth finds the best-matching patch in the key frame and copies its pixels; a confidence map weights the blending. 
+4. **Edge-aware blending & refinement** – Overlaps are resolved with guided filtering; an optional temporal pass enforces consistency over successive frames. 
 
-Because the algorithm works in image space, it inherits the exact style of the artist painting—including brush strokes and high-frequency detail—something that neural style-transfer often washes out. The process is fast (real-time or faster per frame) and runs entirely on the GPU. :contentReference[oaicite:4]{index=4}
+Because the algorithm works in image space, it inherits the exact style of the artist painting—including brush strokes and high-frequency detail—something that neural style-transfer often washes out. The process is fast (real-time or faster per frame) and runs entirely on the GPU.
 
 #### Practical tips for this repository
 
-| Step | Recommendation | Source |
-|------|---------------|--------|
-| Key-frame count | 9 – 16 well-chosen views usually suffice for a 360 ° turntable; add more only when topology changes drastically. | :contentReference[oaicite:5]{index=5} |
-| Resolution | Keep the rendered frames and painted key frames at the same native resolution to avoid resampling artefacts. | :contentReference[oaicite:6]{index=6} |
-| Integration with A1111 | The community extension `CiaraStrawberry/TemporalKit` can automate the call from Stable Diffusion to EbSynth if you prefer a single click workflow. | :contentReference[oaicite:8]{index=8} |
-
+| Step | Recommendation |
+|------|---------------|
+| Key-frame count | 9 – 16 well-chosen views usually suffice for a 360 ° turntable; add more only when topology changes drastically. |
+| Resolution | Keep the rendered frames and painted key frames at the same native resolution to avoid resampling artefacts. |
+| Integration with A1111 | The community extension `CiaraStrawberry/TemporalKit` can automate the call from Stable Diffusion to EbSynth if you prefer a single click workflow. |
 #### Role in our 3-D pipeline
 
-After Stable Diffusion + ControlNet generates high-quality but *per-key-frame* stylised renders, EbSynth sweeps through the sequence and harmonises consistency of transformed frames across time. This step is crucial before we pass the imagery to **Gaussian Splatting**, because temporal consistency directly improves the quality of the reconstructed 3-D point-cloud. :contentReference[oaicite:9]{index=9}
-
+After Stable Diffusion + ControlNet generates high-quality but *per-key-frame* stylised renders, EbSynth sweeps through the sequence and harmonises consistency of transformed frames across time. This step is crucial before we pass the imagery to **Gaussian Splatting**, because temporal consistency directly improves the quality of the reconstructed 3-D point-cloud.
 
 
 
