@@ -94,7 +94,7 @@ Because \(h{\,\times\,}w \ll H{\,\times\,}W\) (e.g., \(64{\times}64\) vs.\ \(512
 #### Text-Prompt Guidance in Diffusion Models
 
 Before introducing **ControlNet**, it is useful to recall that modern diffusion models can already be **steered by natural-language prompts**.  
-The mechanism was formalised in the OpenAI paper *“GLIDE: Towards Photorealistic Image Generation and Editing with Text-Guided Diffusion Models”* (Nichol *et al.*, 2022). The authors demonstrate that if you pass a prompt through a text encoder—initially CLIP ViT-L/14—and concatenate the resulting embedding to the U-Net’s latent or cross-attention layers, the denoising process learns to minimise noise *while satisfying the text condition*.:contentReference[oaicite:0]{index=0}  
+The mechanism was formalised in the OpenAI paper *“GLIDE: Towards Photorealistic Image Generation and Editing with Text-Guided Diffusion Models”* (Nichol *et al.*, 2022). The authors demonstrate that if you pass a prompt through a text encoder—initially CLIP ViT-L/14—and concatenate the resulting embedding to the U-Net’s latent or cross-attention layers, the denoising process learns to minimise noise *while satisfying the text condition*. 
 
 Two guidance strategies proved especially effective:
 
@@ -105,7 +105,7 @@ Two guidance strategies proved especially effective:
 
 This text-conditioning recipe underpins **Stable Diffusion**:  
 * v1.x checkpoints inherit the *pre-trained* OpenAI CLIP encoder used in GLIDE and DALL·E 2.  
-* v2.x replaces it with **OpenCLIP**—a from-scratch replication trained on the LAION-2B dataset—which improves prompt adherence and removes the need for proprietary weights. :contentReference[oaicite:4]{index=4}  
+* v2.x replaces it with **OpenCLIP**—a from-scratch replication trained on the LAION-2B dataset—which improves prompt adherence and removes the need for proprietary weights.
 
 In short, a prompt such as  
 `"Photo of a bronze bust, polished, museum lighting"`  
@@ -115,16 +115,16 @@ is converted into a CLIP embedding that conditions **every** denoising step, yie
 
 ![image](https://github.com/user-attachments/assets/a101b591-9108-4b67-a9c9-4c1c7ad652d2)
 
-**ControlNet** adds an *extra, trainable branch* to a **frozen** text-guided Latent Diffusion Model so that generation can be steered by pixel-aligned inputs such as edge maps, depth, pose, or segmentation. :contentReference[oaicite:0]{index=0}  
+**ControlNet** adds an *extra, trainable branch* to a **frozen** text-guided Latent Diffusion Model so that generation can be steered by pixel-aligned inputs such as edge maps, depth, pose, or segmentation. 
 A duplicate of the U-Net encoder–decoder receives the condition map \(c\); its layers are connected to the frozen backbone through **zero-initialised 1 × 1 convolutions**, which output zeros at the start of training and therefore leave the base model’s behaviour untouched.
-During fine-tuning, these “ZeroConvs” gradually learn a residual that injects just enough spatial information to satisfy \(c\), allowing robust training even on datasets as small as 50 k pairs and preventing catastrophic drift. :contentReference[oaicite:2]{index=2}  
-Official checkpoints cover Canny edges, depth, OpenPose skeletons, normal maps, and more, and the **ControlNet 1.1** release adds “guess-mode” and cached feature variants for ~45 % faster inference. :contentReference[oaicite:3]{index=3}  
+During fine-tuning, these “ZeroConvs” gradually learn a residual that injects just enough spatial information to satisfy \(c\), allowing robust training even on datasets as small as 50 k pairs and preventing catastrophic drift. 
+Official checkpoints cover Canny edges, depth, OpenPose skeletons, normal maps, and more, and the **ControlNet 1.1** release adds “guess-mode” and cached feature variants for ~45 % faster inference. 
 
 *Role in this repo:* we use ControlNet (edge or depth) to lock geometry across chosen 360° renders which are then being transformed by Stable Diffusion into new images according to the prompt. It takes place before EbSynth propagates style and Gaussian Splatting rebuilds the 3-D model, ensuring both structural fidelity and temporal coherence.
 
 ### EbSynth (Example-Based Image Synthesis)
 
-**EbSynth** is a patch-based, example-guided algorithm that propagates an artist-painted key frame across the remaining frames of a video while preserving both local texture details and global temporal coherence. The method was first presented as *“Stylizing Video by Example”* at SIGGRAPH 2019 and builds on earlier work such as *StyLit* (SIGGRAPH 2016) and the PatchMatch family of nearest-neighbour algorithms. :contentReference[oaicite:0]{index=0}
+**EbSynth** is a patch-based, example-guided algorithm that propagates an artist-painted key frame across the remaining frames of a video while preserving both local texture details and global temporal coherence. The method was first presented as *“Stylizing Video by Example”* at SIGGRAPH 2019 and builds on earlier work such as *StyLit* (SIGGRAPH 2016) and the PatchMatch family of nearest-neighbour algorithms. 
 
 #### How it works
 
