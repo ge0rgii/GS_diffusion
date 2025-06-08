@@ -121,7 +121,7 @@ A duplicate of the U-Net encoder–decoder receives the condition map \(c\); its
 During fine-tuning, these “ZeroConvs” gradually learn a residual that injects just enough spatial information to satisfy \(c\), allowing robust training even on datasets as small as 50 k pairs and preventing catastrophic drift. 
 Official checkpoints cover Canny edges, depth, OpenPose skeletons, normal maps, and more, and the **ControlNet 1.1** release adds “guess-mode” and cached feature variants for ~45 % faster inference. 
 
-*Role in this repo:* we use ControlNet (edge or depth) to lock geometry across chosen 360° renders which are then being transformed by Stable Diffusion into new images according to the prompt. It takes place before EbSynth propagates style and Gaussian Splatting rebuilds the 3-D model, ensuring both structural fidelity and temporal coherence.
+*Role in this repo:* we use ControlNet (edge or depth) to lock geometry across chosen 360° renders which are then being transformed by Stable Diffusion into new images according to the prompt. It takes place before EbSynth propagates style and Gaussian Splatting rebuilds the 3D model, ensuring both structural fidelity and temporal coherence.
 
 ### EbSynth (Example-Based Image Synthesis)
 
